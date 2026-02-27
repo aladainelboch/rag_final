@@ -1,0 +1,47 @@
+
+
+services:
+
+  # PostgreSQL 15 + pgvector pré-installé
+  db:
+    image: ankane/pgvector
+    container_name: rag_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB:       rag_boulangerie
+      POSTGRES_USER:     postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # FastAPI Backend
+  api:
+    build: .
+    container_name: rag_api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST:     db
+      DB_PORT:     5432
+      DB_NAME:     rag_boulangerie
+      DB_USER:     postgres
+      DB_PASSWORD: postgres
+    ports:
+      - "8000:8000"
+    volumes:
+      - model_cache:/root/.cache/huggingface
+      - ./pdf_files:/app/pdf_files
+
+volumes:
+  pgdata:
+  model_cache:

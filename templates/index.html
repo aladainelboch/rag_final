@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RAG Boulangerie — Recherche Sémantique</title>
+  <style>
+    :root {
+      --primary: #c8793a; --primary-dark: #a85e28;
+      --bg: #fdf6ee; --card: #ffffff; --text: #2d2015;
+      --muted: #8a7060; --border: #e8d5c4; --radius: 12px;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+    header {
+      background:linear-gradient(135deg,var(--primary),var(--primary-dark));
+      color:white; padding:24px 32px; box-shadow:0 2px 12px rgba(0,0,0,0.15);
+      display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;
+    }
+    .header-left h1 { font-size:1.6rem; font-weight:700; margin-bottom:4px; }
+    .header-left p  { font-size:0.88rem; opacity:0.85; }
+    .badge { display:inline-block; background:rgba(255,255,255,0.2); border-radius:20px; padding:2px 10px; font-size:0.75rem; margin-left:8px; }
+    .header-stats { display:flex; gap:12px; }
+    .stat-pill { background:rgba(255,255,255,0.15); border:1px solid rgba(255,255,255,0.25); border-radius:20px; padding:6px 14px; font-size:0.8rem; text-align:center; }
+    .stat-pill strong { display:block; font-size:1.1rem; }
+    .container { max-width:900px; margin:36px auto; padding:0 20px; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:28px; box-shadow:0 2px 16px rgba(0,0,0,0.06); margin-bottom:24px; }
+    label { display:block; font-weight:600; margin-bottom:10px; font-size:1rem; }
+    .input-row { display:flex; gap:10px; }
+    .textarea-wrap { flex:1; position:relative; }
+    textarea {
+      width:100%; border:2px solid var(--border); border-radius:8px; padding:12px 16px;
+      font-size:0.95rem; font-family:inherit; resize:vertical; min-height:80px;
+      transition:border-color 0.2s; outline:none; color:var(--text);
+    }
+    textarea:focus { border-color:var(--primary); }
+    .char-count { position:absolute; bottom:8px; right:10px; font-size:0.72rem; color:var(--muted); pointer-events:none; }
+    .btn-group { display:flex; flex-direction:column; gap:8px; }
+    .btn { background:var(--primary); color:white; border:none; border-radius:8px; padding:0 24px; font-size:0.95rem; font-weight:600; cursor:pointer; transition:background 0.2s,transform 0.1s; white-space:nowrap; height:48px; }
+    .btn:hover  { background:var(--primary-dark); }
+    .btn:active { transform:scale(0.98); }
+    .btn:disabled { background:#ccc; cursor:not-allowed; }
+    .btn-clear { background:transparent; color:var(--muted); border:1px solid var(--border); font-size:0.82rem; height:36px; padding:0 14px; border-radius:8px; cursor:pointer; transition:all 0.2s; }
+    .btn-clear:hover { background:var(--border); color:var(--text); }
+    .topk-row { display:flex; align-items:center; gap:10px; margin-top:12px; font-size:0.88rem; color:var(--muted); }
+    .topk-row input[type=range] { accent-color:var(--primary); flex:1; max-width:160px; }
+    .hint { font-size:0.75rem; color:var(--muted); }
+    .examples { margin-top:12px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .examples span { font-size:0.78rem; color:var(--muted); font-weight:600; }
+    .chip {
+      background:#f5e9df; border:1px solid var(--border); border-radius:20px;
+      padding:5px 12px; font-size:0.78rem; cursor:pointer; color:var(--primary-dark);
+      transition:background 0.2s,transform 0.1s;
+    }
+    .chip:hover  { background:#ead8c9; }
+    .chip:active { transform:scale(0.97); }
+    .chip.featured { background:var(--primary); color:white; border-color:var(--primary-dark); font-weight:600; }
+    .chip.featured:hover { background:var(--primary-dark); }
+    .spinner { display:none; text-align:center; padding:40px; color:var(--muted); font-size:0.95rem; }
+    .spinner::before {
+      content:''; display:inline-block; width:28px; height:28px;
+      border:3px solid var(--border); border-top-color:var(--primary);
+      border-radius:50%; animation:spin 0.7s linear infinite; margin-right:10px; vertical-align:middle;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    @keyframes slideIn { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+    .result-card {
+      background:var(--card); border:1px solid var(--border); border-radius:var(--radius);
+      padding:20px; margin-bottom:16px; border-left:4px solid var(--primary);
+      transition:box-shadow 0.2s; animation:slideIn 0.3s ease both;
+    }
+    .result-card:nth-child(2) { animation-delay:0.06s; }
+    .result-card:nth-child(3) { animation-delay:0.12s; }
+    .result-card:hover { box-shadow:0 4px 20px rgba(200,121,58,0.14); }
+    .result-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px; }
+    .result-rank { font-weight:700; font-size:0.9rem; color:var(--primary); text-transform:uppercase; letter-spacing:0.05em; }
+    .score-badge { color:white; border-radius:20px; padding:3px 14px; font-size:0.85rem; font-weight:700; }
+    .score-bar-bg { background:var(--border); border-radius:4px; height:6px; margin-bottom:14px; overflow:hidden; }
+    .score-bar { height:100%; border-radius:4px; transition:width 0.7s ease; }
+    /* ── Spec-style result body ── */
+    .result-body { border:1px solid var(--border); border-radius:8px; padding:14px 16px; background:#fdfaf7; }
+    .result-label { font-size:0.78rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px; }
+    .fragment-text { font-size:0.93rem; line-height:1.7; color:var(--text); }
+    .result-score-line { margin-top:10px; font-size:0.88rem; font-weight:700; }
+    .result-footer { display:flex; justify-content:space-between; align-items:center; margin-top:12px; flex-wrap:wrap; gap:8px; }
+    .meta { font-size:0.76rem; color:var(--muted); }
+    .meta .source-file { font-weight:600; color:var(--primary-dark); }
+    .copy-btn { background:transparent; border:1px solid var(--border); border-radius:6px; padding:4px 10px; font-size:0.75rem; color:var(--muted); cursor:pointer; transition:all 0.2s; }
+    .copy-btn:hover { background:var(--border); color:var(--text); }
+    .copy-btn.copied { border-color:#4caf50; color:#4caf50; }
+    .info-bar { font-size:0.82rem; color:var(--muted); margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; }
+    .error-box { background:#fff3f3; border:1px solid #f5c6c6; border-radius:8px; padding:14px 18px; color:#c0392b; font-size:0.9rem; }
+    .empty-state { text-align:center; padding:48px 20px; color:var(--muted); }
+    .empty-state .icon { font-size:3rem; margin-bottom:12px; }
+    footer { text-align:center; padding:24px; color:var(--muted); font-size:0.8rem; border-top:1px solid var(--border); margin-top:8px; }
+    footer a { color:var(--primary); text-decoration:none; }
+    footer a:hover { text-decoration:underline; }
+    @media (max-width:600px) { .input-row { flex-direction:column; } .btn-group { flex-direction:row; } .btn { flex:1; } .header-stats { display:none; } }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>🍞 Recherche Sémantique RAG <span class="badge">Boulangerie & Pâtisserie</span></h1>
+    <p>Fiches techniques enzymes & améliorants · all-MiniLM-L6-v2 · Similarité Cosinus · Top K = 3</p>
+  </div>
+  <div class="header-stats">
+    <div class="stat-pill"><strong id="hdr-frags">—</strong>fragments</div>
+    <div class="stat-pill"><strong id="hdr-docs">—</strong>documents</div>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="card">
+    <label>❓ Posez votre question en langage naturel :</label>
+    <div class="input-row">
+      <div class="textarea-wrap">
+        <textarea id="q" maxlength="500"
+          placeholder="Améliorant de panification : quelles sont les quantités recommandées d'alpha-amylase, xylanase et d'Acide ascorbique ?"
+          oninput="document.getElementById('charCount').textContent=this.value.length+'/500'"></textarea>
+        <span class="char-count" id="charCount">0/500</span>
+      </div>
+      <div class="btn-group">
+        <button class="btn" id="btn" onclick="doSearch()">🔍 Rechercher</button>
+        <button class="btn btn-clear" onclick="clearAll()">✕ Effacer</button>
+      </div>
+    </div>
+    <div class="topk-row">
+      <span>Résultats :</span>
+      <input type="range" id="topk" min="1" max="10" value="3"
+        oninput="document.getElementById('topkVal').textContent=this.value"/>
+      <strong id="topkVal">3</strong>
+      <span class="hint">· Ctrl+Entrée pour lancer</span>
+    </div>
+    <div class="examples">
+      <span>Exemples :</span>
+      <div class="chip featured" onclick="setQ(this)">Améliorant de panification : quelles sont les quantités recommandées d'alpha-amylase, xylanase et d'Acide ascorbique ?</div>
+      <div class="chip" onclick="setQ(this)">Dosage acide ascorbique surgélation</div>
+      <div class="chip" onclick="setQ(this)">Alpha-amylase améliorer fermentation volume</div>
+      <div class="chip" onclick="setQ(this)">Enzyme prolonger durée de conservation</div>
+      <div class="chip" onclick="setQ(this)">Transglutaminase élasticité pâte dosage</div>
+      <div class="chip" onclick="setQ(this)">Glucose oxydase renforcement gluten</div>
+      <div class="chip" onclick="setQ(this)">Xylanase extensibilité pâte boulangerie</div>
+      <div class="chip" onclick="setQ(this)">Lipase volume structure mie</div>
+    </div>
+  </div>
+
+  <div class="spinner" id="spinner">Analyse sémantique en cours...</div>
+  <div id="results"></div>
+
+</div>
+
+<footer>
+  Équipe Jeuudi · STE AGRO MELANGE TECHNOLOGIE — ROSE BLANCHE Group · ai night RAG challenge 2026
+  &nbsp;·&nbsp; <a href="/docs" target="_blank">API Docs</a>
+  &nbsp;·&nbsp; <a href="/health" target="_blank">Health</a>
+  &nbsp;·&nbsp; <a href="/redoc" target="_blank">ReDoc</a>
+</footer>
+
+<script>
+  async function loadStats() {
+    try {
+      const r = await fetch('/health');
+      if (!r.ok) return;
+      const d = await r.json();
+      document.getElementById('hdr-frags').textContent = d.fragments_in_db ?? '—';
+      document.getElementById('hdr-docs').textContent  = d.documents_in_db ?? '—';
+    } catch {}
+  }
+  loadStats();
+
+  function setQ(el) {
+    const ta = document.getElementById('q');
+    ta.value = el.textContent.trim();
+    document.getElementById('charCount').textContent = ta.value.length + '/500';
+    ta.focus();
+  }
+
+  function clearAll() {
+    const ta = document.getElementById('q');
+    ta.value = '';
+    document.getElementById('charCount').textContent = '0/500';
+    document.getElementById('results').innerHTML = '';
+    ta.focus();
+  }
+
+  function scoreColor(s) {
+    if (s >= 0.75) return '#4caf50';
+    if (s >= 0.55) return '#c8793a';
+    return '#ff9800';
+  }
+
+  function scoreLabel(s) {
+    if (s >= 0.75) return 'Très pertinent';
+    if (s >= 0.55) return 'Pertinent';
+    return 'Faiblement pertinent';
+  }
+
+  function esc(t) {
+    return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function copyText(id, btn_id) {
+    const text = document.getElementById('frag-' + id).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.getElementById(btn_id);
+      btn.textContent = '✓ Copié';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = '📋 Copier'; btn.classList.remove('copied'); }, 2000);
+    });
+  }
+
+  async function doSearch() {
+    const question = document.getElementById('q').value.trim();
+    const top_k    = parseInt(document.getElementById('topk').value);
+    const out      = document.getElementById('results');
+    const spin     = document.getElementById('spinner');
+    const btn      = document.getElementById('btn');
+
+    if (!question) {
+      out.innerHTML = '<div class="error-box">⚠️ Veuillez entrer une question.</div>';
+      return;
+    }
+
+    spin.style.display = 'block';
+    out.innerHTML = '';
+    btn.disabled = true;
+    const t0 = Date.now();
+
+    try {
+      const res = await fetch('/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, top_k })
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Erreur serveur');
+      }
+
+      const data = await res.json();
+      const elapsed = ((Date.now() - t0) / 1000).toFixed(2);
+      spin.style.display = 'none';
+      btn.disabled = false;
+
+      if (!data.results.length) {
+        out.innerHTML = `<div class="empty-state"><div class="icon">🔎</div><p>Aucun résultat trouvé.</p></div>`;
+        return;
+      }
+
+      let html = `
+        <div class="info-bar">
+          <span>${data.results.length} résultat(s) sur <strong>${data.total_fragments_searched}</strong> fragments analysés</span>
+          <span>⏱ ${elapsed}s</span>
+        </div>`;
+
+      data.results.forEach(r => {
+        const pct      = Math.round(r.score * 100);
+        const color    = scoreColor(r.score);
+        const label    = scoreLabel(r.score);
+        const btnId    = 'copy-' + r.id;
+        const fname    = r.source_file
+          ? `<span class="source-file">📄 ${esc(r.source_file)}</span> &nbsp;·&nbsp; `
+          : '';
+
+        html += `
+        <div class="result-card">
+          <div class="result-header">
+            <span class="result-rank">Résultat ${r.rank}</span>
+            <span class="score-badge" style="background:${color}">${label}</span>
+          </div>
+          <div class="score-bar-bg">
+            <div class="score-bar" style="width:${pct}%;background:${color}"></div>
+          </div>
+          <div class="result-body">
+            <div class="result-label">Texte</div>
+            <div class="fragment-text" id="frag-${r.id}">${esc(r.texte_fragment)}</div>
+            <div class="result-score-line" style="color:${color}">Score : ${r.score.toFixed(2)}</div>
+          </div>
+          <div class="result-footer">
+            <div class="meta">${fname}Fragment #${r.id} &nbsp;·&nbsp; Document #${r.id_document}</div>
+            <button class="copy-btn" id="${btnId}" onclick="copyText(${r.id},'${btnId}')">📋 Copier</button>
+          </div>
+        </div>`;
+      });
+
+      out.innerHTML = html;
+
+    } catch(e) {
+      spin.style.display = 'none';
+      btn.disabled = false;
+      out.innerHTML = `<div class="error-box">❌ ${e.message}</div>`;
+    }
+  }
+
+  document.getElementById('q').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) doSearch();
+  });
+</script>
+</body>
+</html>
