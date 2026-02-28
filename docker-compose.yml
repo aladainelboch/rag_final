@@ -1,8 +1,5 @@
-
-
 services:
 
-  # PostgreSQL 15 + pgvector pré-installé
   db:
     image: ankane/pgvector
     container_name: rag_db
@@ -22,7 +19,6 @@ services:
       timeout: 5s
       retries: 10
 
-  # FastAPI Backend
   api:
     build: .
     container_name: rag_api
@@ -31,11 +27,12 @@ services:
       db:
         condition: service_healthy
     environment:
-      DB_HOST:     db
-      DB_PORT:     5432
-      DB_NAME:     rag_boulangerie
-      DB_USER:     postgres
-      DB_PASSWORD: postgres
+      DB_HOST:          db
+      DB_PORT:          5432
+      DB_NAME:          rag_boulangerie
+      DB_USER:          postgres
+      DB_PASSWORD:      postgres
+      TRANSLATE_QUERY:  "false"
     ports:
       - "8000:8000"
     volumes:
@@ -45,3 +42,4 @@ services:
 volumes:
   pgdata:
   model_cache:
+    external: true

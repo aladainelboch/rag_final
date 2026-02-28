@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
+"""
+load_data.py — Ingestion PDF → PostgreSQL
+Équipe : Jeuudiddy
 
-import os
-import hashlib
+- Lecture PDFs depuis ./pdf_files
+- Nettoyage du texte (suppression boilerplate)
+- Chunking par fenêtre glissante (60 mots, overlap 15)
+- Embedding all-MiniLM-L6-v2 (dim 384)
+- Déduplication par SHA-256 (ne re-charge pas si inchangé)
+- Idempotent : safe à relancer
+"""
+
+import os, hashlib, re
 import psycopg2
 from psycopg2.extras import execute_batch
 from PyPDF2 import PdfReader
@@ -9,90 +19,90 @@ from sentence_transformers import SentenceTransformer
 from config import DB_CONFIG, EMBEDDING_MODEL
 
 PDF_DIRECTORY = "./pdf_files"
-CHUNK_WORD_TARGET = 180
+CHUNK_SIZE    = 60
+CHUNK_OVERLAP = 15
 EMBEDDING_DIM = 384
 
+NOISE_PATTERNS = [
+    r"VTR&beyond", r"Pingbei Rd", r"Zhuhai", r"Guangdong",
+    r"Stresemann", r"Berlin", r"Tel:.*?\d", r"Mail:.*?@",
+    r"Website:.*?www", r"Last updating", r"info@vtrbeyond",
+    r"www\.vtrbeyond\.com", r"86-756", r"\+49",
+]
 
 def compute_sha256(filepath):
-    sha256 = hashlib.sha256()
+    h = hashlib.sha256()
     with open(filepath, "rb") as f:
         for block in iter(lambda: f.read(4096), b""):
-            sha256.update(block)
-    return sha256.hexdigest()
+            h.update(block)
+    return h.hexdigest()
 
+def clean_text(text):
+    lines = []
+    for line in text.split("\n"):
+        line = line.strip()
+        if not line or len(line) < 8:
+            continue
+        if any(re.search(p, line, re.IGNORECASE) for p in NOISE_PATTERNS):
+            continue
+        lines.append(line)
+    return " ".join(lines)
 
 def extract_text_from_pdf(pdf_path):
     text = ""
     try:
         reader = PdfReader(pdf_path)
         for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
+            pt = page.extract_text()
+            if pt:
+                text += pt + "\n"
     except Exception as e:
-        print(f"Error reading {pdf_path}: {e}")
+        print(f"  ⚠️  Error reading {pdf_path}: {e}")
     return text
 
-
-def smart_chunk(text, target_words=CHUNK_WORD_TARGET):
-    paragraphs = [p.strip() for p in text.split("\n") if p.strip()]
+def sliding_window_chunks(text, chunk_size=CHUNK_SIZE, overlap=CHUNK_OVERLAP):
+    words = text.split()
+    if not words:
+        return []
+    step   = max(1, chunk_size - overlap)
     chunks = []
-    current_chunk = []
-    current_len = 0
-
-    for para in paragraphs:
-        words = para.split()
-        if current_len + len(words) <= target_words:
-            current_chunk.append(para)
-            current_len += len(words)
-        else:
-            if current_chunk:
-                chunks.append(" ".join(current_chunk))
-            current_chunk = [para]
-            current_len = len(words)
-
-    if current_chunk:
-        chunks.append(" ".join(current_chunk))
-
+    i = 0
+    while i < len(words):
+        chunk = words[i:i + chunk_size]
+        if len(chunk) >= 10:
+            chunks.append(" ".join(chunk))
+        i += step
     return chunks
 
-
 def load_data():
-    conn = psycopg2.connect(**DB_CONFIG)
+    conn  = psycopg2.connect(**DB_CONFIG)
     model = SentenceTransformer(EMBEDDING_MODEL)
 
     if not os.path.exists(PDF_DIRECTORY):
         os.makedirs(PDF_DIRECTORY)
-        print(f"Directory '{PDF_DIRECTORY}' created. Add PDFs and rerun.")
+        print(f"📁 Dossier '{PDF_DIRECTORY}' créé. Ajoutez les PDFs et relancez.")
         return
 
-    pdf_files = [f for f in os.listdir(PDF_DIRECTORY) if f.lower().endswith(".pdf")]
-    print(f"{len(pdf_files)} PDF files detected.")
+    pdf_files = sorted(f for f in os.listdir(PDF_DIRECTORY) if f.lower().endswith(".pdf"))
+    print(f"📄 {len(pdf_files)} fichier(s) PDF détecté(s).\n")
 
+    total_fragments = 0
     for filename in pdf_files:
         filepath = os.path.join(PDF_DIRECTORY, filename)
         checksum = compute_sha256(filepath)
 
         with conn:
             with conn.cursor() as cur:
-
-                cur.execute(
-                    "SELECT id, checksum FROM documents WHERE filename = %s",
-                    (filename,)
-                )
+                cur.execute("SELECT id, checksum FROM documents WHERE filename = %s", (filename,))
                 result = cur.fetchone()
 
                 if result:
-                    doc_id, existing_checksum = result
-                    if existing_checksum == checksum:
-                        print(f"Skipping {filename} (unchanged).")
+                    doc_id, existing = result
+                    if existing == checksum:
+                        print(f"  ⏭  {filename} (inchangé, ignoré)")
                         continue
-                    else:
-                        print(f"{filename} changed. Re-ingesting.")
-                        cur.execute(
-                            "DELETE FROM documents WHERE id = %s",
-                            (doc_id,)
-                        )
+                    print(f"  🔄 {filename} modifié — re-ingestion")
+                    cur.execute("DELETE FROM documents WHERE id = %s", (doc_id,))
 
                 cur.execute(
                     "INSERT INTO documents (filename, checksum) VALUES (%s, %s) RETURNING id",
@@ -100,40 +110,34 @@ def load_data():
                 )
                 doc_id = cur.fetchone()[0]
 
-                full_text = extract_text_from_pdf(filepath)
-                if not full_text.strip():
-                    print(f"No text extracted from {filename}.")
+                raw  = extract_text_from_pdf(filepath)
+                if not raw.strip():
+                    print(f"  ⚠️  Aucun texte extrait de {filename}")
                     continue
 
-                fragments = smart_chunk(full_text)
-                print(f"{filename}: {len(fragments)} fragments.")
+                clean  = clean_text(raw)
+                chunks = sliding_window_chunks(clean)
+                if not chunks:
+                    print(f"  ⚠️  Aucun fragment généré pour {filename}")
+                    continue
 
                 embeddings = model.encode(
-                    fragments,
-                    batch_size=32,
-                    normalize_embeddings=True
+                    chunks, batch_size=32,
+                    normalize_embeddings=True,
+                    show_progress_bar=False,
                 )
 
-                if len(embeddings[0]) != EMBEDDING_DIM:
-                    raise ValueError("Embedding dimension mismatch.")
-
-                data_to_insert = [
-                    (doc_id, fragments[i], embeddings[i].tolist())
-                    for i in range(len(fragments))
-                ]
-
+                data = [(doc_id, chunks[i], embeddings[i].tolist()) for i in range(len(chunks))]
                 execute_batch(
                     cur,
                     "INSERT INTO embeddings (document_id, texte_fragment, vecteur) VALUES (%s, %s, %s)",
-                    data_to_insert,
-                    page_size=100
+                    data, page_size=100,
                 )
-
-                print(f"{filename} ingested successfully.")
+                total_fragments += len(chunks)
+                print(f"  ✅ {filename} → {len(chunks)} fragments")
 
     conn.close()
-    print("Ingestion completed.")
-
+    print(f"\n🏁 Ingestion terminée — {total_fragments} fragment(s) ajouté(s).")
 
 if __name__ == "__main__":
     load_data()
