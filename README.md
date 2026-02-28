@@ -43,6 +43,8 @@ rag_final/
 
 ### Prérequis
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installé et lancé
+- .env local
+- .env docker
 
 ### 1 — Cloner / décompresser le projet
 ```bash
@@ -105,7 +107,7 @@ docker-compose down && docker-compose up --build
 
 ---
 
-## Variables d'environnement
+## Variables d'environnement (local)
 
 | Variable | Défaut | Description |
 |---|---|---|
