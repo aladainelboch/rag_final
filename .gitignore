@@ -1,0 +1,11 @@
+# Secrets
+.env
+
+# Python junk (created automatically when you run scripts)
+__pycache__/
+*.py[cod]
+
+# Virtual environments (if you ever create one locally)
+venv/
+.venv/
+env/

@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
 main.py — FastAPI Backend RAG Boulangerie & Pâtisserie
-Équipe : Jeuudiddy | STE AGRO MELANGE TECHNOLOGIE — ROSE BLANCHE Group
-
+Équipe : Jeuudiddy
 Features:
   - Auto-détection du schéma PostgreSQL (document_id / id_document)
   - Similarité cosinus via pgvector natif (fast) avec fallback Python

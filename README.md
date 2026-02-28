@@ -1,10 +1,10 @@
-# 🍞 RAG Boulangerie & Pâtisserie
-**Équipe Jeuudiddy** · STE AGRO MELANGE TECHNOLOGIE — ROSE BLANCHE Group  
+# RAG Boulangerie & Pâtisserie
+**Équipe Jeuudiddy** 
 AI Night RAG Challenge 2026
 
 ---
 
-## 📋 Description
+## Description
 
 Module de recherche sémantique intelligent pour l'assistance à la formulation en boulangerie et pâtisserie.  
 Interroge une base vectorielle PostgreSQL via similarité cosinus pour retourner les 3 fragments les plus pertinents.
@@ -19,7 +19,7 @@ Interroge une base vectorielle PostgreSQL via similarité cosinus pour retourner
 
 ---
 
-## 🗂️ Structure du projet
+## Structure du projet
 
 ```
 rag_final/
@@ -39,7 +39,7 @@ rag_final/
 
 ---
 
-## 🚀 Démarrage rapide
+## Démarrage rapide
 
 ### Prérequis
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/) installé et lancé
@@ -78,7 +78,7 @@ docker-compose up --build
 
 ---
 
-## 🔄 Commandes utiles
+## Commandes utiles
 
 ```bash
 # Voir les logs
@@ -105,7 +105,7 @@ docker-compose down && docker-compose up --build
 
 ---
 
-## 🌐 Variables d'environnement
+## Variables d'environnement
 
 | Variable | Défaut | Description |
 |---|---|---|
@@ -119,7 +119,7 @@ docker-compose down && docker-compose up --build
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 [Navigateur]
@@ -138,7 +138,7 @@ docker-compose down && docker-compose up --build
 
 ---
 
-## 📊 Exemple de résultat
+## Exemple de résultat
 
 **Question :** *Améliorant de panification : quelles sont les quantités recommandées d'alpha-amylase, xylanase et d'Acide ascorbique ?*
 
@@ -158,7 +158,7 @@ Score : 0.82
 
 ---
 
-## 👥 Équipe
+## Équipe
 
-**Jeuudiddy** · STE AGRO MELANGE TECHNOLOGIE — ROSE BLANCHE Group  
-AI Night RAG Challenge · Tunis, 2026
+**Jeuudiddy**
+AI Night RAG Challenge · Polytech Sousse, 2026
