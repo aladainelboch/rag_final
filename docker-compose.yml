@@ -32,7 +32,7 @@ services:
       DB_NAME:          rag_boulangerie
       DB_USER:          postgres
       DB_PASSWORD:      postgres
-      TRANSLATE_QUERY:  "false"
+      TRANSLATE_QUERY:  "true"
     ports:
       - "8000:8000"
     volumes:
